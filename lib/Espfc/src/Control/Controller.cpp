@@ -129,7 +129,33 @@ void FAST_CODE_ATTR Controller::outerLoop()
     _model.state.setpoint.rate[AXIS_PITCH] = calculateSetpointRate(AXIS_PITCH, _model.state.input.ch[AXIS_PITCH]);
   }
   _model.state.setpoint.rate[AXIS_YAW] = calculateSetpointRate(AXIS_YAW, _model.state.input.ch[AXIS_YAW]);
-  _model.state.setpoint.rate[AXIS_THRUST] = _model.state.input.ch[AXIS_THRUST];
+
+  // NEW: Altitude Hold (overrides thrust setpoint if mode + GPS fix)
+  _model.state.setpoint.rate[AXIS_THRUST] = _model.state.input.ch[AXIS_THRUST];  // Default manual
+  if ((_model.config.featureMask & FEATURE_GPS) && _model.state.gps.fix > 0 && _model.state.gps.numSats >= _model.config.gps.minSats) {
+    bool altHoldActive = _model.isModeActive(MODE_ALT_HOLD);  // AUX3 >1500
+    if (altHoldActive) {
+      // Map RC throttle to target alt (tune scale: 1000=0m, 2000=50m)
+      float rcThrust = _model.state.input.ch[AXIS_THRUST];
+      float targetAlt = (rcThrust - 1000.0f) * 0.025f;  // Mid=12.5m, max=25m
+
+      // PID update (dt from loop rate)
+      float dt = 1.0f / _model.state.loopTimer.rate;
+      _model.pid[FC_PID_ALT].dt = dt;
+      float altOutput = _model.pid[FC_PID_ALT].update(targetAlt, _model.state.gps.altitude);
+
+      // Correction: Scale PID output to thrust (tune mult=10-30 for quad weight)
+      float altCorr = altOutput * 20.0f;  // Throttle % per PID unit
+      _model.state.setpoint.rate[AXIS_THRUST] = constrain(rcThrust + altCorr, _model.config.output.minThrottle, _model.config.output.maxThrottle);
+
+      // Debug (if DEBUG_ALTITUDE set)
+      if (_model.config.debug.mode == DEBUG_ALTITUDE) {
+        float altError = targetAlt - _model.state.gps.altitude;
+        Serial.printf("[ALT] Tgt:%.1fm Cur:%.1fm Err:%.1fm Out:%.1f Throt:%.0f\n",
+                      targetAlt, _model.state.gps.altitude, altError, altOutput, _model.state.setpoint.rate[AXIS_THRUST]);
+      }
+    }
+  }
 
   if(_model.config.debug.mode == DEBUG_ANGLERATE)
   {
@@ -148,7 +174,7 @@ void FAST_CODE_ATTR Controller::innerLoop()
     _model.state.output.ch[i] = _model.state.innerPid[i].update(_model.state.setpoint.rate[i], _model.state.gyro.adc[i]) * tpaFactor;
     //_model.state.debug[i] = lrintf(_model.state.innerPid[i].fTerm * 1000);
   }
-  _model.state.output.ch[AXIS_THRUST] = _model.state.setpoint.rate[AXIS_THRUST];
+  _model.state.output.ch[AXIS_THRUST] = _model.state.setpoint.rate[AXIS_THRUST];  // NEW: Applies alt-corrected thrust
 
   if(_model.config.debug.mode == DEBUG_ITERM_RELAX)
   {

@@ -83,6 +83,7 @@ enum FlightMode {
   MODE_ARMED,
   MODE_ANGLE,
   MODE_AIRMODE,
+  MODE_ALT_HOLD,  // NEW: GPS altitude hold mode
   MODE_BUZZER,
   MODE_FAILSAFE,
   MODE_BLACKBOX,
@@ -831,19 +832,22 @@ class ModelConfig
       wireless.pass[0] = 0;
       modelName[0] = 0;
       // GPS setup for NEO-6M
-gps.enabled = true;
-gps.protocol = 0;  // NMEA
-gps.baud = 9600;
-gps.port = 2;
+      gps.enabled = true;
+      gps.protocol = 0;  // NMEA
+      gps.baud = 9600;
+      gps.port = 2;
 
-// Enable GPS feature
-featureMask |= FEATURE_GPS;
+      // Enable GPS feature
+      featureMask |= FEATURE_GPS;
 
-// Set UART2 pins for GPS (NEO-6M TX → ESP32 RX=16)
-pin[PIN_SERIAL_2_RX] = 16;  // RX2 pin (your GPS TX wire)
-pin[PIN_SERIAL_2_TX] = 17;  // TX2 pin (not used, but defined)
+      // Set UART2 pins for GPS (NEO-6M TX → ESP32 RX=16)
+      pin[PIN_SERIAL_2_RX] = 16;  // RX2 pin (your GPS TX wire)
+      pin[PIN_SERIAL_2_TX] = 17;  // TX2 pin (not used, but defined)
 
-// development settings
+      // NEW: Tune ALT PID (P=aggressive climb, I=steady hover, D=dampen bounce; start low)
+      pid[FC_PID_ALT] = { .P = 30, .I = 20, .D = 10, .F = 0 };  // NEW: Alt PID tune
+
+      // development settings
 #if !defined(ESPFC_REVISION)
       devPreset();
 #endif
@@ -880,6 +884,14 @@ pin[PIN_SERIAL_2_TX] = 17;  // TX2 pin (not used, but defined)
       conditions[2].max = 2100;
       conditions[2].logicMode = 0;
       conditions[2].linkId = 0;
+
+      // NEW: Alt Hold on AUX3
+      conditions[3].id = MODE_ALT_HOLD;
+      conditions[3].ch = AXIS_AUX_3;
+      conditions[3].min = 1500;
+      conditions[3].max = 2100;
+      conditions[3].logicMode = 0;
+      conditions[3].linkId = 0;
 #endif
 
 #ifdef ESPFC_DEV_PRESET_SCALER

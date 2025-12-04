@@ -279,6 +279,10 @@ void FAST_CODE_ATTR Input::filterInputs(InputStatus status)
     setInput((Axis)c, v, newFrame);
   }
 
+  // Update flight modes based on current input (after filtering)
+  _model.state.mode.airmodeAllowed = _model.isModeActive(MODE_AIRMODE);
+  _model.state.mode.altHold = _model.isModeActive(MODE_ALT_HOLD);  // NEW: Altitude hold mode evaluation
+
   if(_model.config.debug.mode == DEBUG_RX_TIMING)
   {
     _model.state.debug[3] = micros() - startTime;
